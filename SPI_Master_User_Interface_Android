@@ -1,0 +1,77 @@
+package com.SPIMasterDemo;
+
+import android.support.v7.app.AppCompatActivity;
+import android.os.Bundle;
+import android.widget.Toast;
+
+public class MainActivity extends AppCompatActivity {
+
+
+    public FT311SPIMasterInterface spimInterface;
+
+    byte clockPhaseMode = 0;
+    byte dataOrderSelected = 0;
+    int clockFreq = 12000000;
+
+    byte numBytes = 1;
+    byte[] readWriteBuffer = new byte[1];
+    byte[] numReadWritten = new byte[1];
+
+    byte status;
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_main);
+
+        //01100110 faster
+        //10011001 invisible
+        //01010101 restart
+        //10000001 up
+        //10000001 down
+        //00000000 pause
+        //00001111 reset
+        //11110000 start
+        //11111111 gameover
+
+        spimInterface = new FT311SPIMasterInterface(this);
+
+        readWriteBuffer[0]= (byte)0xff;
+        numReadWritten[0] = (byte)0xff;
+        /*
+        Public void SetConfig(byte clockPhase,byte dataOrder, int clockSpeed).
+        clockPhase: Clock phase and polarity of SPI master interface, default is set to mode 1.
+        0: CPOL=0, CPHA=0 (mode 0).
+        1: CPOL=0, CPHA=1 (mode 1).
+        2: CPOL=1, CPHA=0 (mode 2).
+        3: CPOL=1, CPHA=1 (mode 3).
+        dataOrder: data oder on the SPI bus
+        0: MSB
+        1:LSB
+        clockSpeed:frequency of SPI interface. Defaut is set to 3 MHz and maximum is 24Mhz.
+        */
+        spimInterface.SetConfig(clockPhaseMode, dataOrderSelected, clockFreq);
+
+        /*
+        public byte SendData(byte numBytes, byte [] buffer, byte [] numBytesSend).
+        numBytes: number of bytes to send. maximum is 255.
+        buffer: pointer to data to transmit.
+        numBytesSend: the actual bytes send.
+        */
+
+        /*
+        Public byte ReadData(byte numBytes, byte[] buffer, byte [] numBytesRead)
+        numBytes: number of bytes to read. Maximum value is 255.
+        Buffer: pointer to buffer to read data into.
+        numBytesRead: actual number of bytes read.
+        */
+        new Thread(new Runnable() {
+            public void run(){
+                spimInterface.SendData(numBytes, readWriteBuffer, numReadWritten);
+                status = spimInterface.ReadData(numBytes, readWriteBuffer, numReadWritten);
+            }
+        }).start();
+
+
+    }
+}
