@@ -4,12 +4,14 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Context;
 import android.content.DialogInterface;
+import android.content.Intent;
 import android.graphics.Color;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
 import android.os.Bundle;
+import android.os.Handler;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -18,27 +20,29 @@ import android.view.WindowManager;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.ImageButton;
+import android.widget.ImageView;
 import android.widget.Spinner;
 import android.widget.Toast;
 
 import com.SPIMasterDemo.R.drawable;
 
 public class SPIMasterDemoActivity extends Activity implements SensorEventListener {
-	
-	// menu item
-	Menu myMenu;
+
+    // menu item
+    Menu myMenu;
     final int MENU_FORMAT = Menu.FIRST;
     final int MENU_CLEAN = Menu.FIRST+1;
     final String[] formatSettingItems = {"ASCII","Hexadecimal", "Decimal"};
-    
-	final int FORMAT_ASCII = 0;
-	final int FORMAT_HEX = 1;
-	final int FORMAT_DEC = 2;
-	
-	int inputFormat = FORMAT_HEX;
-	StringBuffer readSB = new StringBuffer();
-	
-	/*declare a FT311 SPIMaster interface variable*/
+
+    final int FORMAT_ASCII = 0;
+    final int FORMAT_HEX = 1;
+    final int FORMAT_DEC = 2;
+
+    int inputFormat = FORMAT_HEX;
+    StringBuffer readSB = new StringBuffer();
+
+    /*declare a FT311 SPIMaster interface variable*/
     public FT311SPIMasterInterface spimInterface;
     /*graphical objects*/
     EditText readText;
@@ -48,124 +52,160 @@ public class SPIMasterDemoActivity extends Activity implements SensorEventListen
     EditText numBytesText;
     EditText statusText,writeStatusText;
     EditText clockFreqText;
-    
+
     Button readButton, writeButton;
     Button configButton, resetButton;
-    
+
     Spinner clockPhaseSpinner;
     Spinner dataOrderSpinner;
-    
+
     /*local variables*/
     byte[] readWriteBuffer;
     byte [] numReadWritten;
-        
+
     byte numBytes;
     byte count;
     byte status;
     byte clockPhaseMode;
     byte dataOrderSelected;
     int clockFreq;
-    
-    
+
+
     /*parse the input values seperated by comma*/
     byte byteCount = 0;
-	byte tempCount = 0;
-	byte tempByte;
-	byte [] tempBytes;
-	String tempString;
+    byte tempCount = 0;
+    byte tempByte;
+    byte [] tempBytes;
+    String tempString;
 
-	///////////////////
-	Button start,pause,restart,fast,invisible,up,down;
-	String srcStr;
-	private SensorManager mSensorManager;
-	private Sensor mAccelerometer;
-	float axisX, axisY, axisZ;
+    ///////////////////
+    Button start,pause,restart;
+    ImageView arr1,arr1s,arr2,arr2s;
+    ImageButton fast,invisible;
+    String srcStr;
+    private SensorManager mSensorManager;
+    private Sensor mAccelerometer;
+    float axisX, axisY, axisZ;
+    boolean started =  false;
+    boolean paused = false;
+    int i=0;
+    int f=0;
 
 
-	/** Called when the activity is first created. */
+    /** Called when the activity is first created. */
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.main);
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        /////////////////////
+        //01100110 fast => 66
+        //10011001 invisible => 99
+        //01010101 restart  => 55
+        //10000001 up  => 81
+        //01111110 down  => 7E
+        //00011000 stay  => 18
+        //00110011 pause => 33
+        //00001111 reset => 0F
+        //11110000 start => F0
+        //11111111 gameover => FF
 
-		/////////////////////
-		//01100110 fast => 66
-		//10011001 invisible => 99
-		//01010101 restart  => 55
-		//10000001 up  => 81
-		//01111110 down  => 7E
-		//00011000 stay  => 18
-		//00000000 pause => 00
-		//00001111 reset => 0F
-		//11110000 start => F0
-		//11111111 gameover => FF
+        start = (Button) findViewById(R.id.start);
+        pause = (Button) findViewById(R.id.pause);
+        restart = (Button) findViewById(R.id.restart);
+        fast = (ImageButton) findViewById(R.id.fast);
+        invisible = (ImageButton) findViewById(R.id.invisible);
+        arr1 = (ImageView) findViewById(R.id.arr1);
+        arr1s = (ImageView) findViewById(R.id.arr1s);
+        arr2 = (ImageView) findViewById(R.id.arr2);
+        arr2s = (ImageView) findViewById(R.id.arr2s);
+        spimInterface = new FT311SPIMasterInterface(this);
 
-		start = (Button) findViewById(R.id.start);
-		pause = (Button) findViewById(R.id.start);
-		restart = (Button) findViewById(R.id.start);
-		fast = (Button) findViewById(R.id.start);
-		invisible = (Button) findViewById(R.id.start);
-		up = (Button) findViewById(R.id.start);
-		down = (Button) findViewById(R.id.start);
+        start.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                srcStr="F0";
+                started =  true;
+                my_write();
+            }
+        });
+        pause.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                paused=!paused;
+                if(paused){
+                    pause.setText("RESUME");
+                    pause.setBackgroundColor(Color.argb(255,63,81,181));
+                    srcStr="33";
+                }else{
+                    pause.setText("PAUSE");
+                    pause.setBackgroundColor(Color.argb(255,255,193,7));
+                    srcStr="CC";
+                }
+                my_write();
+            }
+        });
+        restart.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                srcStr="55";
+                my_write();
+                i=0;
+                f=0;
+                fast.setBackgroundColor(Color.argb(255,121,134,203));
+                invisible.setBackgroundColor(Color.argb(255,77,182,172));
+            }
+        });
 
+        fast.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
 
-		start.setOnClickListener(new View.OnClickListener() {
-			@Override
-			public void onClick(View v) {
-				srcStr="F0";
-				my_write();
-			}
-		});
-		pause.setOnClickListener(new View.OnClickListener() {
-			@Override
-			public void onClick(View v) {
-				srcStr="00";
-				my_write();
-			}
-		});
-		restart.setOnClickListener(new View.OnClickListener() {
-			@Override
-			public void onClick(View v) {
-				srcStr="55";
-				my_write();
-			}
-		});
-		fast.setOnClickListener(new View.OnClickListener() {
-			@Override
-			public void onClick(View v) {
-				srcStr="66";
-				my_write();
-			}
-		});
-		invisible.setOnClickListener(new View.OnClickListener() {
-			@Override
-			public void onClick(View v) {
-				srcStr="99";
-				my_write();
-			}
-		});
+                if(f<2) {
+                    srcStr = "66";
+                    my_write();
+                    f = f + 1;
+                    if (f == 2) {
+                        fast.setBackgroundColor(Color.argb(255, 189, 189, 189));
+                    }
+                }
+            }
+        });
+        invisible.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if(i<2) {
+                    srcStr = "99";
+                    my_write();
+                    i = i + 1;
+                    if (i == 2) {
+                        invisible.setBackgroundColor(Color.argb(255, 189, 189, 189));
+                    }
+                }
+            }
+        });
 
-		mSensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
-		mAccelerometer = mSensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
-		mSensorManager.registerListener(this, mAccelerometer, SensorManager.SENSOR_DELAY_NORMAL);
+        mSensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
+        mAccelerometer = mSensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
+        mSensorManager.registerListener(this, mAccelerometer, SensorManager.SENSOR_DELAY_NORMAL);
         
         /*create editable text objects*/
-         
+
         readText = (EditText)findViewById(R.id.ReadValues);
         writeText = (EditText)findViewById(R.id.WriteValues);
-      
-               
+
+
         numBytesText = (EditText)findViewById(R.id.NumberOfBytesValue);
-        
-       
+
+
         statusText=(EditText)findViewById(R.id.StatusValues);
         statusText.setInputType(0);
         writeStatusText = (EditText)findViewById(R.id.WriteStatusValues);
         writeStatusText.setInputType(0);
         clockFreqText = (EditText)findViewById(R.id.ClockFreqValue);
-		////////////////////////////////////////////////////////////////////////////////////////////////////
-        clockFreqText.setText("12000000");
-         
+        ////////////////////////////////////////////////////////////////////////////////////////////////////
+        clockFreqText.setText("500000");
+
         readButton = (Button)findViewById(R.id.ReadButton);
         writeButton = (Button)findViewById(R.id.WriteButton);
         configButton = (Button)findViewById(R.id.ConfigButton);
@@ -179,12 +219,12 @@ public class SPIMasterDemoActivity extends Activity implements SensorEventListen
         tempBytes = new byte[3]; /*a byte can not be more than 3 digits, max 255*/
         /*default mode is set to mode 0*/////////////////////////////////////////////////////////////
         clockPhaseMode = 0;
-       
-        
+
+
         clockPhaseSpinner = (Spinner)findViewById(R.id.ClockPhaseValue);
-        ArrayAdapter<CharSequence> clockPhaseAdapter = ArrayAdapter.createFromResource(this,R.array.clock_phase, 
-        																	android.R.layout.simple_spinner_item);
-        
+        ArrayAdapter<CharSequence> clockPhaseAdapter = ArrayAdapter.createFromResource(this,R.array.clock_phase,
+                android.R.layout.simple_spinner_item);
+
         clockPhaseSpinner.setAdapter(clockPhaseAdapter);
         clockPhaseSpinner.setSelection(1);
         
@@ -193,226 +233,295 @@ public class SPIMasterDemoActivity extends Activity implements SensorEventListen
         /*default data order is set to MSB*/
         dataOrderSelected = 0;
         dataOrderSpinner = (Spinner)findViewById(R.id.DataOrderValue);
-        ArrayAdapter<CharSequence> dataOrderAdapter = ArrayAdapter.createFromResource(this,R.array.data_order, 
-        																	android.R.layout.simple_spinner_item);
-        
+        ArrayAdapter<CharSequence> dataOrderAdapter = ArrayAdapter.createFromResource(this,R.array.data_order,
+                android.R.layout.simple_spinner_item);
+
         dataOrderSpinner.setAdapter(dataOrderAdapter);
         dataOrderSpinner.setSelection(dataOrderSelected);
-        
-        spimInterface = new FT311SPIMasterInterface(this);
-        
-        getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN);
-        
-        
-        resetButton.setOnClickListener(new View.OnClickListener() {
-			
-			//@Override
-			public void onClick(View v) {
-				/*clear the receive and send edit boxes*/
-	        	readSB.delete(0, readSB.length());
-	        	readText.setText(readSB);
-				writeText.setText("");
-				numBytesText.setText("");
-				statusText.setText("");
-				writeStatusText.setText("");				
-				clockPhaseSpinner.setSelection(1);
-				dataOrderSpinner.setSelection(0); // select MSB
-				clockFreqText.setText("3000000");
-				clockFreqText.setSelection(clockFreqText.getText().length());
 
-				spimInterface.Reset();
-				
-			}
-		});
-                
+        getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN);
+
+
+        resetButton.setOnClickListener(new View.OnClickListener() {
+
+            //@Override
+            public void onClick(View v) {
+				/*clear the receive and send edit boxes*/
+                readSB.delete(0, readSB.length());
+                readText.setText(readSB);
+                writeText.setText("");
+                numBytesText.setText("");
+                statusText.setText("");
+                writeStatusText.setText("");
+                clockPhaseSpinner.setSelection(1);
+                dataOrderSpinner.setSelection(0); // select MSB
+                clockFreqText.setText("3000000");
+                clockFreqText.setSelection(clockFreqText.getText().length());
+
+                spimInterface.Reset();
+
+            }
+        });
+
         readButton.setOnClickListener(new View.OnClickListener() {
-			
-			//@Override
-			public void onClick(View v) {
-				numReadWritten[0] = 0x00;
-				
-				int intRadix = 10;
-				if(FORMAT_HEX == inputFormat)
-				{
-					intRadix = 16;
-				}
-				
-				if(numBytesText.length() != 0)
-				{
-					try{
-						numBytes = (byte) Integer.parseInt(numBytesText.getText().toString(), intRadix);						
-					}
-					catch(NumberFormatException ex){
-						msgToast("Invalid input for Read Number of Bytes",Toast.LENGTH_SHORT);
-						return;						
-					}
-				
-					for(count=0;count<numBytes;count++){
-						readWriteBuffer[count]=(byte)0xff;
-					}
-				
-					status = spimInterface.ReadData(numBytes, readWriteBuffer, numReadWritten);
+
+            //@Override
+            public void onClick(View v) {
+                numReadWritten[0] = 0x00;
+
+                int intRadix = 10;
+                if(FORMAT_HEX == inputFormat)
+                {
+                    intRadix = 16;
+                }
+
+                if(numBytesText.length() != 0)
+                {
+                    try{
+                        numBytes = (byte) Integer.parseInt(numBytesText.getText().toString(), intRadix);
+                    }
+                    catch(NumberFormatException ex){
+                        msgToast("Invalid input for Read Number of Bytes",Toast.LENGTH_SHORT);
+                        return;
+                    }
+
+                    for(count=0;count<numBytes;count++){
+                        readWriteBuffer[count]=(byte)0xff;
+                    }
+
+                    status = spimInterface.ReadData(numBytes, readWriteBuffer, numReadWritten);
 								
 					/*read the bytes from the text box*/
-					char [] displayReadbuffer;
-					displayReadbuffer = new char[64];
-					int displayActualNumBytes;
-					displayActualNumBytes = numReadWritten[0];
+                    char [] displayReadbuffer;
+                    displayReadbuffer = new char[64];
+                    int displayActualNumBytes;
+                    displayActualNumBytes = numReadWritten[0];
 
-					for(count = 0;count<(numReadWritten[0]);count++){
-					displayReadbuffer[count] = (char)readWriteBuffer[count];
-					}
-					
-					appendData(displayReadbuffer, displayActualNumBytes);					
-				}	
-				statusText.setText(Integer.toString(numReadWritten[0], intRadix));
-			}
-		});
+                    for(count = 0;count<(numReadWritten[0]);count++){
+                        displayReadbuffer[count] = (char)readWriteBuffer[count];
+                    }
+
+                    appendData(displayReadbuffer, displayActualNumBytes);
+                }
+                statusText.setText(Integer.toString(numReadWritten[0], intRadix));
+            }
+        });
         
         /*handle write click*/
-		writeButton.setOnClickListener(new View.OnClickListener() {
-			
-			//@Override
-			public void onClick(View v) 
-			{
-				int intRadix = 10;
-				if(FORMAT_HEX == inputFormat)
-				{
-					intRadix = 16;
-				}
-				
-				numReadWritten[0] = 0x00;
+        writeButton.setOnClickListener(new View.OnClickListener() {
+
+            //@Override
+            public void onClick(View v)
+            {
+                int intRadix = 10;
+                if(FORMAT_HEX == inputFormat)
+                {
+                    intRadix = 16;
+                }
+
+                numReadWritten[0] = 0x00;
 				
 				/*parse the string*/
-				byteCount = 0;
-				tempCount = 0;
+                byteCount = 0;
+                tempCount = 0;
 				
 				/*read the bytes from the write box*/
-				if(writeText.length() != 0)
-				{
-					writeData();
-				}
-				writeStatusText.setText(Integer.toString(numReadWritten[0], intRadix));					
-			}
-		});
+                if(writeText.length() != 0)
+                {
+                    writeData();
+                }
+                writeStatusText.setText(Integer.toString(numReadWritten[0], intRadix));
+            }
+        });
         
-       /*config section*/ 
+       /*config section*/
         configButton.setOnClickListener(new View.OnClickListener() {
-			
-			//@Override
-			public void onClick(View v) {
-				
-				int intRadix = 10;
-				
-				try
-				{
-					if(clockFreqText.length() == 0x00)
-					{
-						clockFreqText.setText(Integer.toString(3000000, intRadix));
-					}
-					else if(Integer.parseInt(clockFreqText.getText().toString(), intRadix) > 24000000)
-					{
-						clockFreqText.setText(Integer.toString(24000000, intRadix));
-					}
-					else if( Integer.parseInt(clockFreqText.getText().toString(), intRadix) < 150000)
-					{
-						clockFreqText.setText(Integer.toString(150000, intRadix));
-					}
-					
-				}catch(NumberFormatException ex){
-					msgToast("Invalid input for Frequency",Toast.LENGTH_SHORT);
-					return;						
-				}
-				
-				clockPhaseMode = (byte)clockPhaseSpinner.getSelectedItemPosition();
-				dataOrderSelected = (byte)dataOrderSpinner.getSelectedItemPosition();
-				
-				clockFreq = Integer.parseInt(clockFreqText.getText().toString(), intRadix);
-				clockFreqText.setSelection(clockFreqText.getText().length());
-				spimInterface.SetConfig(clockPhaseMode, dataOrderSelected, clockFreq);
-			}
-		});
+
+            //@Override
+            public void onClick(View v) {
+
+                int intRadix = 10;
+
+                try
+                {
+                    if(clockFreqText.length() == 0x00)
+                    {
+                        clockFreqText.setText(Integer.toString(3000000, intRadix));
+                    }
+                    else if(Integer.parseInt(clockFreqText.getText().toString(), intRadix) > 24000000)
+                    {
+                        clockFreqText.setText(Integer.toString(24000000, intRadix));
+                    }
+                    else if( Integer.parseInt(clockFreqText.getText().toString(), intRadix) < 150000)
+                    {
+                        clockFreqText.setText(Integer.toString(150000, intRadix));
+                    }
+
+                }catch(NumberFormatException ex){
+                    msgToast("Invalid input for Frequency",Toast.LENGTH_SHORT);
+                    return;
+                }
+
+                clockPhaseMode = (byte)clockPhaseSpinner.getSelectedItemPosition();
+                dataOrderSelected = (byte)dataOrderSpinner.getSelectedItemPosition();
+
+                clockFreq = Integer.parseInt(clockFreqText.getText().toString(), intRadix);
+                clockFreqText.setSelection(clockFreqText.getText().length());
+                spimInterface.SetConfig(clockPhaseMode, dataOrderSelected, clockFreq);
+            }
+        });
     }
 
-	//////////////////////
-	@Override
-	public void onAccuracyChanged(Sensor arg0, int arg1)
-	{
-		//Do nothing.
-	}
 
-	@Override
-	public void onSensorChanged(SensorEvent event) {
-		axisX = event.values[0];
-		axisY = event.values[1];
-		axisZ = event.values[2];
-		if(axisZ>6){
-			up.setBackgroundColor(Color.CYAN);
-			down.setBackgroundColor(Color.WHITE);
-			srcStr="81";
-			my_write();
-		}else if(axisZ>3){
-			up.setBackgroundColor(Color.WHITE);
-			down.setBackgroundColor(Color.WHITE);
-			srcStr="18";
-			my_write();
-		}else{
-			up.setBackgroundColor(Color.WHITE);
-			down.setBackgroundColor(Color.CYAN);
-			srcStr="7E";
-			my_write();
-		}
-	}
 
-	public void my_write(){
-		int intRadix = 10;
-		if(FORMAT_HEX == inputFormat)
-		{
-			intRadix = 16;
-		}
+    //////////////////////
 
-		numReadWritten[0] = 0x00;
+    @Override
+    public void onAccuracyChanged(Sensor arg0, int arg1)
+    {
+        //Do nothing.
+    }
+
+    @Override
+    public void onSensorChanged(SensorEvent event) {
+        axisX = event.values[0];
+        axisY = event.values[1];
+        axisZ = event.values[2];
+
+        final Handler handler = new Handler();
+        new Thread(new Runnable(){
+            @Override
+            public void run () {
+                handler.post(new Runnable() {
+                    @Override
+                    public void run () {
+                        handler.postDelayed(this, 500);
+                        //my_read();
+                        if(axisZ>7){
+                            arr1.setVisibility(View.VISIBLE);
+                            arr1s.setVisibility(View.GONE);
+                            arr2.setVisibility(View.GONE);
+                            arr2s.setVisibility(View.VISIBLE);
+                            srcStr="81";
+                            my_write();
+                        }else if(axisZ>5){
+                            arr1.setVisibility(View.GONE);
+                            arr1s.setVisibility(View.VISIBLE);
+                            arr2.setVisibility(View.GONE);
+                            arr2s.setVisibility(View.VISIBLE);
+                            srcStr="18";
+                            my_write();
+                        }else{
+                            arr1.setVisibility(View.GONE);
+                            arr1s.setVisibility(View.VISIBLE);
+                            arr2.setVisibility(View.VISIBLE);
+                            arr2s.setVisibility(View.GONE);
+                            srcStr="7E";
+                            my_write();
+                        }
+                    }
+                });
+            }
+        }).start();
+
+        /*final Handler handler = new Handler();
+        handler.postDelayed(new Thread(new Runnable() {
+            @Override
+            public void run() {
+                my_read();
+                if(axisZ>7){
+                    arr1.setVisibility(View.VISIBLE);
+                    arr1s.setVisibility(View.GONE);
+                    arr2.setVisibility(View.GONE);
+                    arr2s.setVisibility(View.VISIBLE);
+                    srcStr="81";
+                    my_write();
+                }else if(axisZ>5){
+                    arr1.setVisibility(View.GONE);
+                    arr1s.setVisibility(View.VISIBLE);
+                    arr2.setVisibility(View.GONE);
+                    arr2s.setVisibility(View.VISIBLE);
+                    srcStr="18";
+                    my_write();
+                }else{
+                    arr1.setVisibility(View.GONE);
+                    arr1s.setVisibility(View.VISIBLE);
+                    arr2.setVisibility(View.VISIBLE);
+                    arr2s.setVisibility(View.GONE);
+                    srcStr="7E";
+                    my_write();
+                }
+            }
+            }), 10).start();
+*/
+
+    }
+
+    public void my_write(){
+        int intRadix = 10;
+        if(FORMAT_HEX == inputFormat)
+        {
+            intRadix = 16;
+        }
+
+        numReadWritten[0] = 0x00;
 
 				/*parse the string*/
-		byteCount = 0;
-		tempCount = 0;
+        byteCount = 0;
+        tempCount = 0;
 
 				/*read the bytes from the write box*/
-		if(writeText.length() != 0)
-		{
-			writeData();
-		}
-		writeStatusText.setText(Integer.toString(numReadWritten[0], intRadix));
-	}
+        if(started)
+        {
+            writeData();
+        }
+        writeStatusText.setText(Integer.toString(numReadWritten[0], intRadix));
+    }
 
-	public void my_read(){
-		numReadWritten[0] = 0x00;
+    public void my_read(){
+        numReadWritten[0] = 0x00;
 
-		int intRadix = 10;
-		if(FORMAT_HEX == inputFormat)
-		{
-			intRadix = 16;
-		}
+        int intRadix = 10;
+        if(FORMAT_HEX == inputFormat)
+        {
+            intRadix = 16;
+        }
 
-		if(numBytesText.length() != 0) {
-			try {
-				numBytes = (byte) Integer.parseInt(numBytesText.getText().toString(), intRadix);
-			} catch (NumberFormatException ex) {
-				msgToast("Invalid input for Read Number of Bytes", Toast.LENGTH_SHORT);
-				return;
+        if(numBytesText.length() != 0)
+        {
+            try{
+                numBytes = (byte) Integer.parseInt(numBytesText.getText().toString(), intRadix);
+            }
+            catch(NumberFormatException ex){
+                msgToast("Invalid input for Read Number of Bytes",Toast.LENGTH_SHORT);
+                return;
+            }
+
+            for(count=0;count<numBytes;count++){
+                readWriteBuffer[count]=(byte)0xff;
+            }
+
+            status = spimInterface.ReadData(numBytes, readWriteBuffer, numReadWritten);
+
+					/*read the bytes from the text box*/
+            char [] displayReadbuffer;
+            displayReadbuffer = new char[64];
+            int displayActualNumBytes;
+            displayActualNumBytes = numReadWritten[0];
+
+            for(count = 0;count<(numReadWritten[0]);count++){
+                displayReadbuffer[count] = (char)readWriteBuffer[count];
+            }
+
+            appendData(displayReadbuffer, displayActualNumBytes);
+        }
+        statusText.setText(Integer.toString(numReadWritten[0], intRadix));
+
+			if(statusText.getText().toString()=="11111111"){
+                startActivity(new Intent(this,end.class));
 			}
 
-			for (count = 0; count < numBytes; count++) {
-				readWriteBuffer[count] = (byte) 0xff;
-			}
-
-			status = spimInterface.ReadData(numBytes, readWriteBuffer, numReadWritten);
-		/*///////////////
-			if(status==11111111){
-				//GAME OVER
-			}*/
-		}
-	}
+    }
 
     @Override
     protected void onResume() {
@@ -420,7 +529,7 @@ public class SPIMasterDemoActivity extends Activity implements SensorEventListen
         // to take appropriate action when the activity looses focus
         super.onResume();
         spimInterface.ResumeAccessory();
-		mSensorManager.registerListener(this, mAccelerometer, SensorManager.SENSOR_DELAY_NORMAL);
+        mSensorManager.registerListener(this, mAccelerometer, SensorManager.SENSOR_DELAY_NORMAL);
     }
 
     @Override
@@ -428,307 +537,308 @@ public class SPIMasterDemoActivity extends Activity implements SensorEventListen
         // Ideally should implement onResume() and onPause()
         // to take appropriate action when the activity looses focus
         super.onPause();
-    }
-    
-    @Override 
-    protected void onDestroy(){
-    	
-    	spimInterface.DestroyAccessory();
-    	super.onDestroy();
+        mSensorManager.unregisterListener(this,mAccelerometer);
     }
 
-	@Override
-	public boolean onCreateOptionsMenu(Menu menu) {
-		myMenu = menu;
-		myMenu.add(0, MENU_FORMAT, 0, "Format - ASCII");
-		myMenu.add(0, MENU_CLEAN, 0, "Clean Read Bytes Field");		
-		return super.onCreateOptionsMenu(myMenu);
-	}	
+    @Override
+    protected void onDestroy(){
+        spimInterface.DestroyAccessory();
+        super.onDestroy();
+    }
+
+   /* @Override
+    public boolean onCreateOptionsMenu(Menu menu) {
+        myMenu = menu;
+        myMenu.add(0, MENU_FORMAT, 0, "Format - ASCII");
+        myMenu.add(0, MENU_CLEAN, 0, "Clean Read Bytes Field");
+        return super.onCreateOptionsMenu(myMenu);
+    }
 
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
         switch(item.getItemId())
         {
-        case MENU_FORMAT:
-        	new AlertDialog.Builder(this).setTitle("Data Format")
-			.setItems(formatSettingItems, new DialogInterface.OnClickListener() 
-			{
-				@Override
-				public void onClick(DialogInterface dialog, int which)
-				{	
-					MenuItem item = myMenu.findItem(MENU_FORMAT);
-					if(0 == which)
-					{						
-						inputFormat = FORMAT_ASCII;
-					    item.setTitle("Format - "+ formatSettingItems[0]);
-					}
-					else if(1 == which)
-					{
-						inputFormat = FORMAT_HEX;
-						item.setTitle("Format - "+ formatSettingItems[1]);
-					}
-					else
-					{
-						inputFormat = FORMAT_DEC;
-						item.setTitle("Format - "+ formatSettingItems[2]);						
-					}
-				    char[] ch = new char[1];
-				    appendData(ch, 0);
-				}
-			}).show();           	
-        	
-        	break;
-        	
-        case MENU_CLEAN:
-        default:        	
-        	readSB.delete(0, readSB.length());
-        	readText.setText(readSB);
-        	break;
+            case MENU_FORMAT:
+                new AlertDialog.Builder(this).setTitle("Data Format")
+                        .setItems(formatSettingItems, new DialogInterface.OnClickListener()
+                        {
+                            @Override
+                            public void onClick(DialogInterface dialog, int which)
+                            {
+                                MenuItem item = myMenu.findItem(MENU_FORMAT);
+                                if(0 == which)
+                                {
+                                    inputFormat = FORMAT_ASCII;
+                                    item.setTitle("Format - "+ formatSettingItems[0]);
+                                }
+                                else if(1 == which)
+                                {
+                                    inputFormat = FORMAT_HEX;
+                                    item.setTitle("Format - "+ formatSettingItems[1]);
+                                }
+                                else
+                                {
+                                    inputFormat = FORMAT_DEC;
+                                    item.setTitle("Format - "+ formatSettingItems[2]);
+                                }
+                                char[] ch = new char[1];
+                                appendData(ch, 0);
+                            }
+                        }).show();
+
+                break;
+
+            case MENU_CLEAN:
+            default:
+                readSB.delete(0, readSB.length());
+                readText.setText(readSB);
+                break;
         }
- 
+
         return super.onOptionsItemSelected(item);
     }
-    
-    
-    public void writeData()
-    {    	    	
-    	////////////////////////////String srcStr = writeText.getText().toString();
-    	String destStr = "";
-    	switch(inputFormat)
-    	{
-    	case FORMAT_HEX:
-    		{
-				String[] tmpStr = srcStr.split(" ");
-				
-				for(int i = 0; i < tmpStr.length; i++)
-				{
-					if(tmpStr[i].length() == 0)
-					{
-						msgToast("Incorrect input for HEX format."
-								+"\nThere should be only 1 space between 2 HEX words.",Toast.LENGTH_SHORT);
-						return;
-					}					
-					else if(tmpStr[i].length() != 2)
-					{
-						msgToast("Incorrect input for HEX format."
-								+"\nIt should be 2 bytes for each HEX word.",Toast.LENGTH_SHORT);
-						return;
-					}						
-				}
-				
-				try	
-				{
-					destStr = hexToAscii(srcStr.replaceAll(" ", ""));
-				}
-				catch(IllegalArgumentException e)
-				{
-					msgToast("Incorrect input for HEX format."
-						    +"\nAllowed charater: 0~9, a~f and A~F",Toast.LENGTH_SHORT);
-					return;
-				}
-    		}
-    		break;
-    		
-    	case FORMAT_DEC:
-    		{
-				String[] tmpStr = srcStr.split(" ");
-				
-				for(int i = 0; i < tmpStr.length; i++)
-				{
-					if(tmpStr[i].length() == 0)
-					{
-						msgToast("Incorrect input for DEC format."
-								+"\nThere should be only 1 space between 2 DEC words.",Toast.LENGTH_SHORT);
-						return;
-					}					
-					else if(tmpStr[i].length() != 3)
-					{
-						msgToast("Incorrect input for DEC format."
-								+"\nIt should be 3 bytes for each DEC word.",Toast.LENGTH_SHORT);
-						return;
-					}						
-				}
-				
-				try
-				{
-					destStr = decToAscii(srcStr.replaceAll(" ", ""));
-				}
-				catch(IllegalArgumentException e)
-				{	
-					if(e.getMessage().equals("ex_a"))
-					{
-						msgToast("Incorrect input for DEC format."
-								+"\nAllowed charater: 0~9",Toast.LENGTH_SHORT);					
-					}
-					else
-					{
-						msgToast("Incorrect input for DEC format."
-							    +"\nAllowed range: 0~255",Toast.LENGTH_SHORT);
-					}					
-					return;
-				}
-    		}
-    		break;
-    		
-    	case FORMAT_ASCII:    		
-    	default:
-    		destStr = srcStr;
-    		break;
-    	}
-    	
-		numBytes = (byte)destStr.length();
-		for (int i = 0; i < numBytes; i++) {
-			readWriteBuffer[i] = (byte)destStr.charAt(i);
-		}					
-		spimInterface.SendData(numBytes, readWriteBuffer, numReadWritten);
-    }
-    
-	String hexToAscii(String s) throws IllegalArgumentException
-	{
-		  int n = s.length();
-		  StringBuilder sb = new StringBuilder(n / 2);
-		  for (int i = 0; i < n; i += 2)
-		  {
-		    char a = s.charAt(i);
-		    char b = s.charAt(i + 1);
-		    sb.append((char) ((hexToInt(a) << 4) | hexToInt(b)));
-		  }
-		  return sb.toString();
-	}
-	
-	static int hexToInt(char ch)
-	{
-		  if ('a' <= ch && ch <= 'f') { return ch - 'a' + 10; }
-		  if ('A' <= ch && ch <= 'F') { return ch - 'A' + 10; }
-		  if ('0' <= ch && ch <= '9') { return ch - '0'; }
-		  throw new IllegalArgumentException(String.valueOf(ch));
-	}
+*/
 
-	String decToAscii(String s) throws IllegalArgumentException
-	{
-		
-		int n = s.length();
-		boolean pause = false;
-		StringBuilder sb = new StringBuilder(n / 2);
-		for (int i = 0; i < n; i += 3)
-		{
-			char a = s.charAt(i);
-			char b = s.charAt(i + 1);
-			char c = s.charAt(i + 2);
-			int val = decToInt(a)*100 + decToInt(b)*10 + decToInt(c);
-			if(0 <= val && val <= 255)
-			{
-				sb.append((char) val);
-			}
-			else
-			{
-				pause = true;
-				break;
-			}
-		}
-		
-		if(false == pause)
-			return sb.toString();
-		throw new IllegalArgumentException("ex_b");
-	}
-	
-	static int decToInt(char ch)
-	{
-		  if ('0' <= ch && ch <= '9') { return ch - '0'; }
-		  throw new IllegalArgumentException("ex_a");
-	}
-	
+    public void writeData()
+    {
+        ////////////////////////////String srcStr = writeText.getText().toString();
+        //pause.setText(srcStr);
+        String destStr = "";
+        switch(inputFormat)
+        {
+            case FORMAT_HEX:
+            {
+                String[] tmpStr = srcStr.split(" ");
+
+                for(int i = 0; i < tmpStr.length; i++)
+                {
+                    if(tmpStr[i].length() == 0)
+                    {
+                        msgToast("Incorrect input for HEX format."
+                                +"\nThere should be only 1 space between 2 HEX words.",Toast.LENGTH_SHORT);
+                        return;
+                    }
+                    else if(tmpStr[i].length() != 2)
+                    {
+                        msgToast("Incorrect input for HEX format."
+                                +"\nIt should be 2 bytes for each HEX word.",Toast.LENGTH_SHORT);
+                        return;
+                    }
+                }
+
+                try
+                {
+                    destStr = hexToAscii(srcStr.replaceAll(" ", ""));
+                }
+                catch(IllegalArgumentException e)
+                {
+                    msgToast("Incorrect input for HEX format."
+                            +"\nAllowed charater: 0~9, a~f and A~F",Toast.LENGTH_SHORT);
+                    return;
+                }
+            }
+            break;
+
+            case FORMAT_DEC:
+            {
+                String[] tmpStr = srcStr.split(" ");
+
+                for(int i = 0; i < tmpStr.length; i++)
+                {
+                    if(tmpStr[i].length() == 0)
+                    {
+                        msgToast("Incorrect input for DEC format."
+                                +"\nThere should be only 1 space between 2 DEC words.",Toast.LENGTH_SHORT);
+                        return;
+                    }
+                    else if(tmpStr[i].length() != 3)
+                    {
+                        msgToast("Incorrect input for DEC format."
+                                +"\nIt should be 3 bytes for each DEC word.",Toast.LENGTH_SHORT);
+                        return;
+                    }
+                }
+
+                try
+                {
+                    destStr = decToAscii(srcStr.replaceAll(" ", ""));
+                }
+                catch(IllegalArgumentException e)
+                {
+                    if(e.getMessage().equals("ex_a"))
+                    {
+                        msgToast("Incorrect input for DEC format."
+                                +"\nAllowed charater: 0~9",Toast.LENGTH_SHORT);
+                    }
+                    else
+                    {
+                        msgToast("Incorrect input for DEC format."
+                                +"\nAllowed range: 0~255",Toast.LENGTH_SHORT);
+                    }
+                    return;
+                }
+            }
+            break;
+
+            case FORMAT_ASCII:
+            default:
+                destStr = srcStr;
+                break;
+        }
+
+        numBytes = (byte)destStr.length();
+        for (int i = 0; i < numBytes; i++) {
+            readWriteBuffer[i] = (byte)destStr.charAt(i);
+        }
+        spimInterface.SendData(numBytes, readWriteBuffer, numReadWritten);
+    }
+
+    String hexToAscii(String s) throws IllegalArgumentException
+    {
+        int n = s.length();
+        StringBuilder sb = new StringBuilder(n / 2);
+        for (int i = 0; i < n; i += 2)
+        {
+            char a = s.charAt(i);
+            char b = s.charAt(i + 1);
+            sb.append((char) ((hexToInt(a) << 4) | hexToInt(b)));
+        }
+        return sb.toString();
+    }
+
+    static int hexToInt(char ch)
+    {
+        if ('a' <= ch && ch <= 'f') { return ch - 'a' + 10; }
+        if ('A' <= ch && ch <= 'F') { return ch - 'A' + 10; }
+        if ('0' <= ch && ch <= '9') { return ch - '0'; }
+        throw new IllegalArgumentException(String.valueOf(ch));
+    }
+
+    String decToAscii(String s) throws IllegalArgumentException
+    {
+
+        int n = s.length();
+        boolean pause = false;
+        StringBuilder sb = new StringBuilder(n / 2);
+        for (int i = 0; i < n; i += 3)
+        {
+            char a = s.charAt(i);
+            char b = s.charAt(i + 1);
+            char c = s.charAt(i + 2);
+            int val = decToInt(a)*100 + decToInt(b)*10 + decToInt(c);
+            if(0 <= val && val <= 255)
+            {
+                sb.append((char) val);
+            }
+            else
+            {
+                pause = true;
+                break;
+            }
+        }
+
+        if(false == pause)
+            return sb.toString();
+        throw new IllegalArgumentException("ex_b");
+    }
+
+    static int decToInt(char ch)
+    {
+        if ('0' <= ch && ch <= '9') { return ch - '0'; }
+        throw new IllegalArgumentException("ex_a");
+    }
+
     void msgToast(String str, int showTime)
     {
-    	Toast.makeText(this, str, showTime).show();
+        Toast.makeText(this, str, showTime).show();
     }
-    
+
     public void appendData(String s)
     {
-    	switch(inputFormat)
-    	{
-    	case FORMAT_HEX:
-    		{
-    			readText.append("Hex");    		
-    		}
-    		break;
-    		
-    	case FORMAT_DEC:
-    		{
-    			readText.append("Dec");
-    		}
-    		break;
-    		
-    	case FORMAT_ASCII:    		
-    	default:
-    		readText.append(s);
-    		break;
-    	}
+        switch(inputFormat)
+        {
+            case FORMAT_HEX:
+            {
+                readText.append("Hex");
+            }
+            break;
+
+            case FORMAT_DEC:
+            {
+                readText.append("Dec");
+            }
+            break;
+
+            case FORMAT_ASCII:
+            default:
+                readText.append(s);
+                break;
+        }
     }
-    
+
     public void appendData(char[] data, int len)
     {
-    	if(len >= 1)    		
-    		readSB.append(String.copyValueOf(data, 0, len));
-    	
-    	switch(inputFormat)
-    	{
-    	case FORMAT_HEX:
-    		{
-    			char[] ch = readSB.toString().toCharArray();
-    			String temp;
-    			StringBuilder tmpSB = new StringBuilder();
-    			for(int i = 0; i < ch.length; i++)
-    			{
-    				temp = String.format("%02x", (int) ch[i]);
+        if(len >= 1)
+            readSB.append(String.copyValueOf(data, 0, len));
 
-    				if(temp.length() == 4)
-    				{
-    					tmpSB.append(temp.substring(2, 4));
-    				}
-    				else
-    				{
-    					tmpSB.append(temp);
-    				}
+        switch(inputFormat)
+        {
+            case FORMAT_HEX:
+            {
+                char[] ch = readSB.toString().toCharArray();
+                String temp;
+                StringBuilder tmpSB = new StringBuilder();
+                for(int i = 0; i < ch.length; i++)
+                {
+                    temp = String.format("%02x", (int) ch[i]);
 
-   					if(i+1 < ch.length)
-   					{
-   						tmpSB.append(" ");	
-   					}
-    			}
-    			readText.setText(tmpSB);
-    			tmpSB.delete(0, tmpSB.length());
-    		}
-    		break;
-    		
-    	case FORMAT_DEC:
-    		{
-    			char[] ch = readSB.toString().toCharArray();
-    			String temp;
-    			StringBuilder tmpSB = new StringBuilder();
-    			for(int i = 0; i < ch.length; i++)
-    			{   				
-    				temp = Integer.toString((int)(ch[i] & 0xff));
-    				for(int j = 0; j < (3 - temp.length()); j++)
-    				{
-    					tmpSB.append("0");
-    				}
-   					tmpSB.append(temp);
-   					
-   					if(i+1 < ch.length)
-   					{
-   						tmpSB.append(" ");	
-   					}
-    			}    			
-    			readText.setText(tmpSB);
-    			tmpSB.delete(0, tmpSB.length());    			
-    		}
-    		break;
-    		
-    	case FORMAT_ASCII:    		
-    	default:
-    		readText.setText(readSB);
-    		break;
-    	}
+                    if(temp.length() == 4)
+                    {
+                        tmpSB.append(temp.substring(2, 4));
+                    }
+                    else
+                    {
+                        tmpSB.append(temp);
+                    }
+
+                    if(i+1 < ch.length)
+                    {
+                        tmpSB.append(" ");
+                    }
+                }
+                readText.setText(tmpSB);
+                tmpSB.delete(0, tmpSB.length());
+            }
+            break;
+
+            case FORMAT_DEC:
+            {
+                char[] ch = readSB.toString().toCharArray();
+                String temp;
+                StringBuilder tmpSB = new StringBuilder();
+                for(int i = 0; i < ch.length; i++)
+                {
+                    temp = Integer.toString((int)(ch[i] & 0xff));
+                    for(int j = 0; j < (3 - temp.length()); j++)
+                    {
+                        tmpSB.append("0");
+                    }
+                    tmpSB.append(temp);
+
+                    if(i+1 < ch.length)
+                    {
+                        tmpSB.append(" ");
+                    }
+                }
+                readText.setText(tmpSB);
+                tmpSB.delete(0, tmpSB.length());
+            }
+            break;
+
+            case FORMAT_ASCII:
+            default:
+                readText.setText(readSB);
+                break;
+        }
     }
 }
