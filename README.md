@@ -5,16 +5,20 @@ The aim of the project is creating a “Pong” game on VGA screen by using FPGA
 
 -----------------------------------------------------------------------------------------------------------------------------------------
 FT311D Chip
+
 <img src="https://github.com/emreatik/Pong-Game/blob/master/FT311D%20Chip.PNG"/>
 
 -----------------------------------------------------------------------------------------------------------------------------------------
 FT311D PCB
+
 <img src="https://github.com/emreatik/Pong-Game/blob/master/FT311D%20PCB.PNG"/>
 
 -----------------------------------------------------------------------------------------------------------------------------------------
 Block Diagram of Connecting PCB to FPGA
+
 <img src="https://github.com/emreatik/Pong-Game/blob/master/Block%20Diagram.PNG"/>
 
 -----------------------------------------------------------------------------------------------------------------------------------------
 Gameplay
+
 <img src="https://github.com/emreatik/Pong-Game/blob/master/Gameplay.PNG"/>
